@@ -22,7 +22,35 @@ Introduction
     :alt: Code Style: Ruff
 
 
-.. todo:: Describe what the library does.
+Decode LoRa mesh packets in CircuitPython.
+
+This library is compatible with the Meshtastic protocol. It is not
+Meshtastic, is not affiliated with or endorsed by the Meshtastic
+project, and does not implement a Meshtastic node.
+
+**Receive only.** The library turns raw packet bytes into decoded
+content. It does not transmit, does not participate in mesh routing,
+and a board using it will not appear in anyone's node list.
+
+It never touches a radio, so the same code works over LoRa, over UDP,
+or against a file of captured packets, and it can be tested with no
+hardware attached.
+
+What it does
+------------
+
+* Decrypts channel broadcasts encrypted with a shared PSK (AES-CTR)
+* Expands the one byte default PSK shorthand as well as 16 and 32 byte keys
+* Walks the Data protobuf without a protobuf library
+* Parses text messages and NodeInfo user records
+
+What it does not do
+-------------------
+
+* **Transmit.** Nothing here builds or sends packets.
+* **PKI direct messages.** Those use per node X25519 keys, which
+  CircuitPython has no support for. Channel broadcasts are unaffected.
+* **Radio configuration.** See the settings table below.
 
 
 Dependencies
@@ -30,49 +58,21 @@ Dependencies
 This driver depends on:
 
 * `Adafruit CircuitPython <https://github.com/adafruit/circuitpython>`_
-* `Bus Device <https://github.com/adafruit/Adafruit_CircuitPython_BusDevice>`_
 
-Please ensure all dependencies are available on the CircuitPython filesystem.
-This is easily achieved by downloading
-`the Adafruit library and driver bundle <https://circuitpython.org/libraries>`_
-or individual libraries can be installed using
-`circup <https://github.com/adafruit/circup>`_.
-
-
-
-.. todo:: Describe the Adafruit product this library works with. For PCBs, you can also add the
-image from the assets folder in the PCB's GitHub repo.
-
-`Purchase one from the Adafruit shop <http://www.adafruit.com/products/>`_
+The core module ``aesio`` is built into CircuitPython. Please ensure all
+dependencies are available on the CircuitPython filesystem. This is easily
+achieved by downloading `the Adafruit library and driver bundle
+<https://circuitpython.org/libraries>`_.
 
 Installing from PyPI
 =====================
-.. note:: This library is not available on PyPI yet. Install documentation is included
-   as a standard element. Stay tuned for PyPI availability!
 
-.. todo:: Remove the above note if PyPI version is/will be available at time of release.
-
-On supported GNU/Linux systems like the Raspberry Pi, you can install the driver locally `from
-PyPI <https://pypi.org/project/adafruit-circuitpython-meshfruit/>`_.
+On supported GNU/Linux systems like the Raspberry Pi, you can install the driver
+locally `from PyPI <https://pypi.org/project/adafruit-circuitpython-meshfruit/>`_.
 To install for current user:
 
 .. code-block:: shell
 
-    pip3 install adafruit-circuitpython-meshfruit
-
-To install system-wide (this may be required in some cases):
-
-.. code-block:: shell
-
-    sudo pip3 install adafruit-circuitpython-meshfruit
-
-To install in a virtual environment in your current project:
-
-.. code-block:: shell
-
-    mkdir project-name && cd project-name
-    python3 -m venv .venv
-    source .env/bin/activate
     pip3 install adafruit-circuitpython-meshfruit
 
 Installing to a Connected CircuitPython Device with Circup
@@ -92,21 +92,60 @@ following command to install:
 
     circup install adafruit_meshfruit
 
-Or the following command to update an existing version:
-
-.. code-block:: shell
-
-    circup update
-
 Usage Example
 =============
 
-.. todo:: Add a quick, simple example. It and other examples should live in the
-examples folder and be included in docs/examples.rst.
+.. code-block:: python
+
+    from adafruit_meshfruit import meshtastic
+
+    packet = bytes.fromhex(
+        "ffffffffc83fd409d734952c630800c86869e3bd000649b1ff995fcb"
+    )
+
+    if meshtastic.channel_hash(packet) == 0x08:
+        plain = meshtastic.decrypt(packet)
+        port, body = meshtastic.parse_data(plain)
+        if port == meshtastic.PORT_TEXT_MESSAGE:
+            print(meshtastic.sender_id(packet), meshtastic.decode_text(body))
+
+Radio settings
+==============
+
+The library does not configure a radio, but a receiver has to match the
+sender's physical layer. For the US LongFast preset:
+
+=========================  ============
+Setting                    Value
+=========================  ============
+Bandwidth                  250 kHz
+Spreading factor           11
+Coding rate                5
+Preamble length            16
+CRC                        enabled
+Sync word (register 0x39)  ``0x2B``
+Frequency slot 20          906.875 MHz
+=========================  ============
+
+The sync word is the detail most likely to catch you out:
+``adafruit_rfm9x`` defaults to ``0x12``, and the value used here has to
+be written directly to register ``0x39``.
+
+Slot ``N`` in the US band sits at ``902.125 + (N - 1) * 0.25`` MHz.
+
+Verification
+============
+
+The default channel key and the AES-CTR nonce layout were checked
+against the protocol's firmware source rather than inferred. The
+NodeInfo field numbers were confirmed against a packet captured off
+the air.
 
 Documentation
 =============
-API documentation for this library can be found on `Read the Docs <https://docs.circuitpython.org/projects/meshfruit/en/latest/>`_.
+
+API documentation for this library can be found on `Read the Docs
+<https://docs.circuitpython.org/projects/meshfruit/en/latest/>`_.
 
 For information on building library documentation, please check out
 `this guide <https://learn.adafruit.com/creating-and-sharing-a-circuitpython-library/sharing-our-docs-on-readthedocs#sphinx-5-1>`_.
