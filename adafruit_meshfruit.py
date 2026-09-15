@@ -43,73 +43,28 @@ PORT_POSITION = const(3)
 PORT_NODEINFO = const(4)
 
 
-class Meshfruit:
-    """Decode mesh packets one at a time.
+class MeshtasticPacket:
+    """One received packet
 
-    :param bytes psk: The channel pre-shared key, 0, 1, 16 or 32 bytes.
-        Defaults to :attr:`DEFAULT_KEY`
-
-    :raises ValueError: if the PSK is not one of the accepted lengths
+    :param bytes raw: A complete packet, header included
+    :param bytes key: The expanded channel key
     """
 
-    DEFAULT_KEY = bytes.fromhex("d4f1bb3a20290759f0bcffabcf4e6901")
-
-    def __init__(self, psk: Optional[Union[bytes, bytearray]] = None) -> None:
-        self._psk = None
-        self._key = None
-        self.psk = self.DEFAULT_KEY if psk is None else psk
-        self.packet = None
-
-    @property
-    def psk(self) -> bytes:
-        """Channel pre-shared key
-
-        :rtype: bytes
-
-        :raises ValueError: if the PSK is not one of the accepted
-            lengths
-        """
-        return self._psk
-
-    @psk.setter
-    def psk(self, value: Union[bytes, bytearray]) -> None:
-        value = bytes(value)
-        if len(value) == 0 or (len(value) == 1 and value[0] == 0):
-            key = None
-        elif len(value) == 1:
-            key = self.DEFAULT_KEY[:-1] + value
-        elif len(value) in {16, 32}:
-            key = value
-        else:
-            raise ValueError("PSK must be 0, 1, 16, or 32 bytes")
+    def __init__(self, raw: Union[bytes, bytearray], key: Optional[bytes]) -> None:
+        self._raw = raw
         self._key = key
-        self._psk = value
-
-    @property
-    def key(self) -> Optional[bytes]:
-        """Eexpanded AES key.
-
-        None if the channel is unencrypted.
-
-        :rtype: bytes
-        """
-        return self._key
-
-    @property
-    def packet(self) -> Optional[Union[bytes, bytearray]]:
-        """The packet being decoded
-
-        :rtype: bytes
-        """
-        return self._packet
-
-    @packet.setter
-    def packet(self, value: Optional[Union[bytes, bytearray]]) -> None:
-        self._packet = value
         self._plaintext = None
         self._parsed = False
         self._portnum = None
         self._payload = None
+
+    @property
+    def raw(self) -> Union[bytes, bytearray]:
+        """The packet as received, header included.
+
+        :rtype: bytes
+        """
+        return self._raw
 
     @property
     def sender_id(self) -> str:
@@ -117,7 +72,7 @@ class Meshfruit:
 
         :rtype: str
         """
-        return f"!{int.from_bytes(self._packet[4:8], 'little'):08x}"
+        return f"!{int.from_bytes(self._raw[4:8], 'little'):08x}"
 
     @property
     def channel_hash(self) -> int:
@@ -125,7 +80,7 @@ class Meshfruit:
 
         :rtype: int
         """
-        return self._packet[_CHANNEL_HASH_OFFSET]
+        return self._raw[_CHANNEL_HASH_OFFSET]
 
     @property
     def nonce(self) -> bytes:
@@ -133,8 +88,8 @@ class Meshfruit:
 
         :rtype: bytes
         """
-        packet_id = bytes(self._packet[8:12])
-        sender = bytes(self._packet[4:8])
+        packet_id = bytes(self._raw[8:12])
+        sender = bytes(self._raw[4:8])
         return packet_id + bytes(4) + sender + bytes(4)
 
     @property
@@ -144,7 +99,7 @@ class Meshfruit:
         :rtype: bytearray
         """
         if self._plaintext is None:
-            ciphertext = self._packet[HEADER_LEN:]
+            ciphertext = self._raw[HEADER_LEN:]
             plaintext = bytearray(len(ciphertext))
             aesio.AES(self._key, aesio.MODE_CTR, self.nonce).encrypt_into(ciphertext, plaintext)
             self._plaintext = plaintext
@@ -163,7 +118,7 @@ class Meshfruit:
     def payload(self) -> Optional[bytearray]:
         """The payload bytes. None if the field was absent.
 
-        :rtype: bytes
+        :rtype: bytearray
         """
         self._parse()
         return self._payload
@@ -273,3 +228,67 @@ class Meshfruit:
                 index += 8
             else:
                 break
+
+
+class Meshtastic:
+    """Settings for one mesh channel.
+
+    :param bytes psk: The channel pre-shared key, 0, 1, 16 or 32 bytes.
+        Defaults to :attr:`DEFAULT_KEY`
+
+    :raises ValueError: if the PSK is not one of the accepted lengths
+    """
+
+    DEFAULT_KEY = bytes.fromhex("d4f1bb3a20290759f0bcffabcf4e6901")
+
+    def __init__(self, psk: Optional[Union[bytes, bytearray]] = None) -> None:
+        self._psk = None
+        self._key = None
+        self.psk = self.DEFAULT_KEY if psk is None else psk
+
+    @property
+    def psk(self) -> bytes:
+        """Channel pre-shared key
+
+        :rtype: bytes
+
+        :raises ValueError: if the PSK is not one of the accepted
+            lengths
+        """
+        return self._psk
+
+    @psk.setter
+    def psk(self, value: Union[bytes, bytearray]) -> None:
+        value = bytes(value)
+        if len(value) == 0 or (len(value) == 1 and value[0] == 0):
+            key = None
+        elif len(value) == 1:
+            key = self.DEFAULT_KEY[:-1] + value
+        elif len(value) in {16, 32}:
+            key = value
+        else:
+            raise ValueError("PSK must be 0, 1, 16, or 32 bytes")
+        self._key = key
+        self._psk = value
+
+    @property
+    def key(self) -> Optional[bytes]:
+        """Eexpanded AES key.
+
+        None if the channel is unencrypted.
+
+        :rtype: bytes
+        """
+        return self._key
+
+    def decode(self, raw: Union[bytes, bytearray]) -> MeshtasticPacket:
+        """Wrap a received buffer as a packet on this channel.
+
+        Nothing is decrypted here. The work happens when a property of
+        the returned packet asks for it.
+
+        :param bytes raw: A complete packet, header included
+        :return: The packet, holding this channel's key
+        :rtype: MeshtasticPacket
+        """
+        return MeshtasticPacket(raw, self._key)

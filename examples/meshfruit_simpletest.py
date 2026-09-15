@@ -28,20 +28,20 @@ rfm9x.preamble_length = 16
 rfm9x.enable_crc = True
 rfm9x._write_u8(SYNC_WORD_REG, SYNC_WORD)  # noqa: SLF001
 
-mesh = adafruit_meshfruit.Meshfruit()
+mesh = adafruit_meshfruit.Meshtastic()
 
 print("listening on", FREQUENCY, "MHz")
 
 while True:
-    packet = rfm9x.receive(with_header=True, timeout=5.0)
-    if packet is None:
+    raw = rfm9x.receive(with_header=True, timeout=5.0)
+    if raw is None:
         continue
-    if len(packet) <= adafruit_meshfruit.HEADER_LEN:
-        continue
-
-    mesh.packet = packet
-    if mesh.channel_hash != CHANNEL_HASH:
+    if len(raw) <= adafruit_meshfruit.HEADER_LEN:
         continue
 
-    if mesh.portnum == adafruit_meshfruit.PORT_TEXT_MESSAGE and mesh.payload:
-        print(mesh.sender_id, mesh.text)
+    packet = mesh.decode(raw)
+    if packet.channel_hash != CHANNEL_HASH:
+        continue
+
+    if packet.portnum == adafruit_meshfruit.PORT_TEXT_MESSAGE and packet.payload:
+        print(packet.sender_id, packet.text)
