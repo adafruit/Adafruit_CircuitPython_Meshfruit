@@ -43,7 +43,7 @@ PORT_POSITION = const(3)
 PORT_NODEINFO = const(4)
 
 
-class MeshtasticPacket_Compatiblet:
+class MeshtasticPacket_Compatible:
     """One received Meshtastic compatible packet
 
     :param bytes raw: A complete packet, header included
@@ -281,7 +281,7 @@ class Meshtastic_Compatible:
         """
         return self._key
 
-    def decode(self, raw: Union[bytes, bytearray]) -> MeshtasticPacket:
+    def decode(self, raw: Union[bytes, bytearray]) -> MeshtasticPacket_Compatible:
         """Wrap a received buffer as a packet on this channel.
 
         Nothing is decrypted here. The work happens when a property of
@@ -289,6 +289,6 @@ class Meshtastic_Compatible:
 
         :param bytes raw: A complete packet, header included
         :return: The packet, holding this channel's key
-        :rtype: MeshtasticPacket
+        :rtype: MeshtasticPacket_Compatible
         """
-        return MeshtasticPacket(raw, self._key)
+        return MeshtasticPacket_Compatible(raw, self._key)
