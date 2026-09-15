@@ -22,36 +22,7 @@ Introduction
     :alt: Code Style: Ruff
 
 
-Decode LoRa mesh packets in CircuitPython.
-
-This library is compatible with the Meshtastic protocol. It is not
-Meshtastic, is not affiliated with or endorsed by the Meshtastic
-project, and does not implement a Meshtastic node.
-
-**Receive only.** The library turns raw packet bytes into decoded
-content. It does not transmit, does not participate in mesh routing,
-and a board using it will not appear in anyone's node list.
-
-It never touches a radio, so the same code works over LoRa, over UDP,
-or against a file of captured packets, and it can be tested with no
-hardware attached.
-
-What it does
-------------
-
-* Decrypts channel broadcasts encrypted with a shared PSK (AES-CTR)
-* Expands the one byte default PSK shorthand as well as 16 and 32 byte keys
-* Walks the Data protobuf without a protobuf library
-* Parses text messages and NodeInfo user records
-
-What it does not do
--------------------
-
-* **Transmit.** Nothing here builds or sends packets.
-* **PKI direct messages.** Those use per node X25519 keys, which
-  CircuitPython has no support for. Channel broadcasts are unaffected.
-* **Radio configuration.** See the settings table below.
-
+CircuitPython helper to decode LoRa mesh packets.
 
 Dependencies
 =============
@@ -59,10 +30,11 @@ This driver depends on:
 
 * `Adafruit CircuitPython <https://github.com/adafruit/circuitpython>`_
 
-The core module ``aesio`` is built into CircuitPython. Please ensure all
-dependencies are available on the CircuitPython filesystem. This is easily
-achieved by downloading `the Adafruit library and driver bundle
-<https://circuitpython.org/libraries>`_.
+Please ensure all dependencies are available on the CircuitPython filesystem.
+This is easily achieved by downloading
+`the Adafruit library and driver bundle <https://circuitpython.org/libraries>`_
+or individual libraries can be installed using
+`circup <https://github.com/adafruit/circup>`_.
 
 Installing from PyPI
 =====================
@@ -97,49 +69,47 @@ Usage Example
 
 .. code-block:: python
 
-    from adafruit_meshfruit import meshtastic
+    import adafruit_rfm9x
+    import board
+    import digitalio
 
-    packet = bytes.fromhex(
-        "ffffffffc83fd409d734952c630800c86869e3bd000649b1ff995fcb"
+    import adafruit_meshfruit
+
+    FREQUENCY = 906.875
+    CHANNEL_HASH = 0x08
+    SYNC_WORD_REG = 0x39
+    SYNC_WORD = 0x2B
+
+    rfm9x = adafruit_rfm9x.RFM9x(
+        board.SPI(),
+        digitalio.DigitalInOut(board.D11),
+        digitalio.DigitalInOut(board.D12),
+        FREQUENCY,
     )
+    rfm9x.signal_bandwidth = 250000
+    rfm9x.spreading_factor = 11
+    rfm9x.coding_rate = 5
+    rfm9x.preamble_length = 16
+    rfm9x.enable_crc = True
+    rfm9x._write_u8(SYNC_WORD_REG, SYNC_WORD)  # noqa: SLF001
 
-    if meshtastic.channel_hash(packet) == 0x08:
-        plain = meshtastic.decrypt(packet)
-        port, body = meshtastic.parse_data(plain)
-        if port == meshtastic.PORT_TEXT_MESSAGE:
-            print(meshtastic.sender_id(packet), meshtastic.decode_text(body))
+    mesh = adafruit_meshfruit.Meshtastic()
 
-Radio settings
-==============
+    print("listening on", FREQUENCY, "MHz")
 
-The library does not configure a radio, but a receiver has to match the
-sender's physical layer. For the US LongFast preset:
+    while True:
+        raw = rfm9x.receive(with_header=True, timeout=5.0)
+        if raw is None:
+            continue
+        if len(raw) <= adafruit_meshfruit.HEADER_LEN:
+            continue
 
-=========================  ============
-Setting                    Value
-=========================  ============
-Bandwidth                  250 kHz
-Spreading factor           11
-Coding rate                5
-Preamble length            16
-CRC                        enabled
-Sync word (register 0x39)  ``0x2B``
-Frequency slot 20          906.875 MHz
-=========================  ============
+        packet = mesh.decode(raw)
+        if packet.channel_hash != CHANNEL_HASH:
+            continue
 
-The sync word is the detail most likely to catch you out:
-``adafruit_rfm9x`` defaults to ``0x12``, and the value used here has to
-be written directly to register ``0x39``.
-
-Slot ``N`` in the US band sits at ``902.125 + (N - 1) * 0.25`` MHz.
-
-Verification
-============
-
-The default channel key and the AES-CTR nonce layout were checked
-against the protocol's firmware source rather than inferred. The
-NodeInfo field numbers were confirmed against a packet captured off
-the air.
+        if packet.portnum == adafruit_meshfruit.PORT_TEXT_MESSAGE and packet.payload:
+            print(packet.sender_id, packet.text)
 
 Documentation
 =============
