@@ -43,8 +43,8 @@ PORT_POSITION = const(3)
 PORT_NODEINFO = const(4)
 
 
-class MeshtasticPacket:
-    """One received packet
+class MeshtasticPacket_Compatiblet:
+    """One received Meshtastic compatible packet
 
     :param bytes raw: A complete packet, header included
     :param bytes key: The expanded channel key
@@ -230,8 +230,8 @@ class MeshtasticPacket:
                 break
 
 
-class Meshtastic:
-    """Settings for one mesh channel.
+class Meshtastic_Compatible:
+    """Settings for one Meshtastic compatible channel.
 
     :param bytes psk: The channel pre-shared key, 0, 1, 16 or 32 bytes.
         Defaults to :attr:`DEFAULT_KEY`

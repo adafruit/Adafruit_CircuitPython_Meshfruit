@@ -28,7 +28,7 @@ rfm9x.preamble_length = 16
 rfm9x.enable_crc = True
 rfm9x._write_u8(SYNC_WORD_REG, SYNC_WORD)  # noqa: SLF001
 
-mesh = adafruit_meshfruit.Meshtastic()
+mesh = adafruit_meshfruit.Meshtastic_Compatible()
 
 print("listening on", FREQUENCY, "MHz")
 
