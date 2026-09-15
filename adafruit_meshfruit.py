@@ -273,7 +273,7 @@ class Meshtastic:
 
     @property
     def key(self) -> Optional[bytes]:
-        """Eexpanded AES key.
+        """Expanded AES key.
 
         None if the channel is unencrypted.
 
